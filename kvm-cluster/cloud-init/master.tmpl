@@ -1,0 +1,96 @@
+#cloud-config
+hostname: __HOSTNAME__
+users:
+  - name: user01
+    groups: sudo
+    shell: /bin/bash
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    ssh_authorized_keys:
+      - __SSH_PUBKEY__
+
+package_update: true
+packages:
+  - openssh-server
+  - sysbench
+  - stress-ng
+  - iozone3
+  - iperf3
+  - hpcc
+  - openmpi-bin
+  - dnsmasq
+  - iptables-persistent
+  - nfs-kernel-server
+
+write_files:
+  # --- DHCP + DNS of the internal network (same options as the VirtualBox master) ---
+  - path: /etc/dnsmasq.d/cluster.conf
+    permissions: "0644"
+    content: |
+      bogus-priv
+      resolv-file=/etc/resolv.dnsmasq
+      listen-address=127.0.0.1,192.168.56.1
+      bind-dynamic
+      dhcp-range=192.168.56.2,192.168.56.10,12h
+      dhcp-option=option:router,192.168.56.1
+      dhcp-option=option:dns-server,192.168.56.1
+      cache-size=1000
+      log-queries
+      domain=cluster.local
+      expand-hosts
+      local=/cluster.local/
+      # Do not publish /etc/hosts (127.0.1.1 master would leak to the workers);
+      # the master is published explicitly with its internal address instead.
+      no-hosts
+      host-record=master,master.cluster.local,192.168.56.1
+
+  # --- IP forwarding, persistent ---
+  - path: /etc/sysctl.d/99-ip-forward.conf
+    permissions: "0644"
+    content: |
+      net.ipv4.ip_forward = 1
+
+  # --- NFS export ---
+  - path: /etc/exports
+    permissions: "0644"
+    content: |
+      /shared 192.168.56.0/255.255.255.0(rw,sync,no_root_squash,no_subtree_check)
+
+  # --- MPI hostfile IN SHARED, world-readable, owned by user01 ---
+  - path: /shared/mpi-hostfile
+    owner: user01:user01
+    permissions: "0644"
+    defer: true
+    content: |
+      master slots=2
+      node01 slots=2
+      node02 slots=2
+
+runcmd:
+  # Create and set permissions for the NFS shared folder
+  - mkdir -p /shared
+  - chmod 777 /shared
+  # Ensure mpi-hostfile in /shared is owned by user01
+  - chown user01:user01 /shared/mpi-hostfile || true
+  # Enables IP forwarding
+  - sysctl --system
+  # Configure iptables rules for NAT and forwarding between networks
+  - iptables -t nat -A POSTROUTING -o enp1s0 -j MASQUERADE
+  - iptables -P FORWARD DROP
+  - iptables -A FORWARD -i enp2s0 -o enp1s0 -j ACCEPT
+  - iptables -A FORWARD -i enp1s0 -o enp2s0 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
+  - netfilter-persistent save
+  # Link dnsmasq to systemd resolver for DNS
+  - ln -sf /run/systemd/resolve/resolv.conf /etc/resolv.dnsmasq
+  - systemctl enable dnsmasq
+  - systemctl restart dnsmasq
+  # Set local DNS via resolv.conf
+  - rm -f /etc/resolv.conf
+  - echo "nameserver 127.0.0.1" > /etc/resolv.conf
+  - echo "options edns0 trust-ad" >> /etc/resolv.conf
+  - echo "search cluster.local" >> /etc/resolv.conf
+  # Export the NFS shares immediately (reloads /etc/exports)
+  - exportfs -ra
+  - systemctl enable --now nfs-kernel-server
+  - systemctl restart nfs-kernel-server
+  # Ensure an Ed25519 SSH key exists for user01
+  - sudo -u user01 sh -c 'test -f /home/user01/.ssh/id_ed25519 || ssh-keygen -q -t ed25519 -N "" -f /home/user01/.ssh/id_ed25519'

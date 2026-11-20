@@ -1,0 +1,4 @@
+<network>
+  <name>CloudBasicNet</name>
+  <bridge name='virbr-hpc' stp='off' delay='0'/>
+</network>

@@ -1,0 +1,48 @@
+# Kubernetes credentials
+**/admin.conf
+**/kubeadm_join.sh
+
+# SSH private keys
+**/ssh/
+**/id_ed25519
+**/known_hosts
+
+# VM images
+images/
+**/*.qcow2
+**/*.img
+**/*.iso
+**/*.tar
+*.vdi
+*.vmdk
+*.ova
+
+# Benchmark results
+**/results/
+**/shared/
+
+# LaTeX generated files
+**/report/
+
+# Editor, OS & Python artifacts
+.DS_Store
+*.swp
+.vscode/
+.idea/
+__pycache__/
+*.pyc
+
+# other folders
+other/*
+bkp/
+
+# cloud-init generated files
+kvm-cluster/master-qcow2.xml
+kvm-cluster/cloud-init/master/
+kvm-cluster/cloud-init/node01/
+kvm-cluster/cloud-init/node02/
+kvm-cluster/cloud-init/master.net-config
+kube-cluster/cloud-init/k8s-master/
+kube-cluster/cloud-init/k8s-monitoring/
+kube-cluster/cloud-init/k8s-hpl-worker/
+kube-cluster/cloud-init/k8s-master.net-config

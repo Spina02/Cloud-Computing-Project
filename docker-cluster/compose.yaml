@@ -1,0 +1,77 @@
+# ----------------------------------------------------
+#                    Node template
+# ----------------------------------------------------
+x-node: &node
+  build: .
+  image: hpc-node:latest
+  mem_limit: 2g
+  memswap_limit: 2g        # = mem_limit: disables swap, reproduce VM setup
+  cpus: 2
+  volumes:
+    - ./shared:/shared        # Shared directory
+    - ./ssh:/ssh-keys:ro      # Read-only SSH keys folder
+
+# make nodes after generating keys
+x-after-keygen: &after-keygen
+  depends_on:
+    keygen:
+      condition: service_completed_successfully
+
+# ----------------------------------------------------
+#                       Services
+# ----------------------------------------------------
+services:
+  # -------------  One-time service ------------- 
+  keygen:
+    <<: *node
+    container_name: keygen
+    entrypoint: ["/bin/bash", "-c", "[ -f /ssh-keys/id_ed25519 ] || ssh-keygen -t ed25519 -N '' -f /ssh-keys/id_ed25519; chmod 777 /shared"]
+    volumes:
+      - ./ssh:/ssh-keys          # without :ro, it must write here
+  # Master node settings
+
+  # ------------- Cluster node definitions ------------- 
+  # Master settings
+  master:
+    <<: [*node, *after-keygen]
+    container_name: master
+    hostname: master
+    cpuset: "0,2"               # Distinct physical cores
+    environment:
+      - NODE_ROLE=master        # Set the node role to master
+    networks:
+      hpcnet:
+        ipv4_address: 172.28.1.10      # remains static
+
+  # Worker node 01 settings
+  node01:
+    <<: [*node, *after-keygen]
+    container_name: node01
+    hostname: node01
+    cpuset: "4,6"               # Distinct physical cores
+    environment:
+      - NODE_ROLE=worker        # Set the node role to worker
+    networks:
+      - hpcnet                  # no ipv4_address: dynamic
+
+  # Worker node 02 settings
+  node02:
+    <<: [*node, *after-keygen]
+    container_name: node02      # Set the node role to worker
+    hostname: node02
+    cpuset: "8,10"              # Distinct physical cores
+    environment:
+      - NODE_ROLE=worker
+    networks:
+      - hpcnet
+
+# ----------------------------------------------------
+#               Network configuration
+# ----------------------------------------------------
+networks:
+  hpcnet:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.1.0/24              # The subnet for cluster communication
+          ip_range: 172.28.1.128/25          # dynamic pool, separated from the static .10

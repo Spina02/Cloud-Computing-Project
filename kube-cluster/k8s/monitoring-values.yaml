@@ -1,0 +1,21 @@
+grafana:
+  nodeSelector: {workload: monitoring}
+prometheus:
+  prometheusSpec:
+    nodeSelector: {workload: monitoring}
+    retention: 2d
+    scrapeInterval: 10s
+    evaluationInterval: 10s
+kubelet: {serviceMonitor: {interval: 10s}}
+alertmanager:
+  alertmanagerSpec:
+    nodeSelector: {workload: monitoring}
+prometheusOperator:
+  nodeSelector: {workload: monitoring}
+kube-state-metrics:
+  nodeSelector: {workload: monitoring}
+# With kubeadm, these components expose metrics only on localhost. We don't need them:
+kubeEtcd: {enabled: false}
+kubeScheduler: {enabled: false}
+kubeControllerManager: {enabled: false}
+kubeProxy: {enabled: false}

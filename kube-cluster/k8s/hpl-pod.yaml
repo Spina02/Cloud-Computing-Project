@@ -1,0 +1,35 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: hpcc
+spec:
+  restartPolicy: Never
+  nodeSelector:
+    workload: hpl
+  containers:
+  - name: hpcc
+    image: hpc-node:latest
+    imagePullPolicy: Never
+    resources:
+      requests: {cpu: "3", memory: 4Gi}
+      limits:   {cpu: "3", memory: 4Gi}
+    env:
+    - {name: OPENBLAS_NUM_THREADS, value: "1"}
+    - {name: OMP_NUM_THREADS, value: "1"}
+    command: ["/bin/bash", "-c"]
+    args:
+    - |
+      mkdir -p /work && cd /work
+      for N in 20352; do                      # <-- problem sizes (8064 11328 14016 17280)
+        for i in 1 2 3 4 5; do
+          sed -E "s/^[0-9]+( +Ns)/${N}\1/" /config/hpccinf.txt > hpccinf.txt
+          rm -f hpccoutf.txt
+          mpirun --allow-run-as-root -np 3 hpcc && cat hpccoutf.txt || exit 1
+        done
+        sleep 30                              # <-- pause between sizes
+      done
+    volumeMounts:
+    - {name: cfg, mountPath: /config}
+  volumes:
+  - name: cfg
+    configMap: {name: hpcc-config}

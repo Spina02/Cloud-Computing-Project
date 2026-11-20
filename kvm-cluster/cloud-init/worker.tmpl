@@ -1,0 +1,33 @@
+#cloud-config
+hostname: __HOSTNAME__
+ssh_pwauth: true
+chpasswd:
+  expire: false
+users:
+  - name: user01
+    groups: sudo
+    shell: /bin/bash
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    lock_passwd: false
+    plain_text_passwd: pass
+    ssh_authorized_keys:
+      - __SSH_PUBKEY__
+      
+package_update: true
+packages:
+  - openssh-server
+  - sysbench
+  - stress-ng
+  - iozone3
+  - iperf3
+  - hpcc
+  - openmpi-bin
+  - nfs-common
+  - autofs
+
+runcmd:
+  - mkdir -p /etc/auto.master.d
+  - echo "/- /etc/auto.shared" > /etc/auto.master.d/shared.autofs
+  - echo "/shared -fstype=nfs4,rw master:/shared" > /etc/auto.shared
+  - systemctl enable --now autofs
+  - systemctl restart autofs
